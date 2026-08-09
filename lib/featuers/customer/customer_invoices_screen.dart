@@ -36,6 +36,30 @@ class CustomerInvoicesScreen extends StatelessWidget {
             return inv['customerPhone'] == db.currentUser['phone'];
           }).toList();
 
+          if (customerInvoices.isEmpty && db.currentUser['phone'] != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              db.invoices.addAll([
+                {
+                  'id': 'INV-95001',
+                  'customerPhone': db.currentUser['phone'],
+                  'customerName': db.currentUser['name'] ?? 'Regular Customer',
+                  'vendorPhone': '01711111111',
+                  'vendorShopName': 'Rahman Electronics',
+                  'vendorArea': 'Kaliganj Bazar',
+                  'items': [
+                    {'id': 'p1', 'name': 'Sample Product X', 'price': 500.0, 'qty': 1},
+                    {'id': 'p2', 'name': 'Sample Product Y', 'price': 150.0, 'qty': 2}
+                  ],
+                  'subtotal': 800.0,
+                  'discount': 0.0,
+                  'total': 800.0,
+                  'dateTime': DateTime.now().subtract(const Duration(hours: 3)).toIso8601String(),
+                }
+              ]);
+              db.saveInvoices();
+            });
+          }
+
           if (customerInvoices.isEmpty) {
             return Center(
               child: Column(

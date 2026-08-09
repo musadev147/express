@@ -45,21 +45,63 @@ class _VendorRegisterScreenState extends State<VendorRegisterScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text("Vendor Registration", style: TextStyle(color: Color(0xFF0F172A))),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
-          onPressed: () => Get.back(),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(24.r),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+      body: Stack(
+        children: [
+          // Floating back button
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12.h,
+            left: 20.w,
+            child: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A), size: 18),
+                onPressed: () => Get.back(),
+              ),
+            ),
+          ),
+
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 24.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: 60.h),
+                  // Styled role header icon
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: EdgeInsets.all(12.r),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF16A34A).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(16.r),
+                      ),
+                      child: Icon(
+                        Icons.storefront_rounded,
+                        color: const Color(0xFF16A34A),
+                        size: 32.r,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 20.h),
+
+                  Text(
+                    "Vendor Registration",
+                    style: TextStyle(
+                      fontSize: 26.sp,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  SizedBox(height: 6.h),
+                  Text(
+                    "Register your shop details to get started",
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      color: const Color(0xFF6E6E86),
+                    ),
+                  ),
+                  SizedBox(height: 32.h),
               TextField(
                 controller: _ownerController,
                 decoration: InputDecoration(
@@ -250,6 +292,8 @@ class _VendorRegisterScreenState extends State<VendorRegisterScreen> {
           ),
         ),
       ),
-    );
+    ],
+  ),
+);
   }
 }

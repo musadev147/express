@@ -79,9 +79,9 @@ class VendorProductScreen extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.inventory_2_outlined, size: 64, color: Color(0xFF6E6E86)),
+                        const Icon(Icons.tag_outlined, size: 64, color: Color(0xFF6E6E86)),
                         SizedBox(height: 12.h),
-                        const Text("No products cataloged by this seller.", style: TextStyle(color: Color(0xFF6E6E86))),
+                        const Text("No tags listed by this seller.", style: TextStyle(color: Color(0xFF6E6E86))),
                       ],
                     ),
                   );
@@ -92,7 +92,8 @@ class VendorProductScreen extends StatelessWidget {
                   itemCount: vendorProducts.length,
                   itemBuilder: (context, idx) {
                     var prod = vendorProducts[idx];
-                    bool inStock = prod['isAvailable'] == true && (prod['stock'] ?? 0) > 0;
+                    String tagName = prod['name'] ?? '';
+                    List<dynamic> subTags = prod['subTags'] ?? [];
 
                     return Container(
                       margin: EdgeInsets.only(bottom: 12.h),
@@ -102,56 +103,70 @@ class VendorProductScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16.r),
                         border: Border.all(color: Colors.black.withOpacity(0.04)),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  prod['name'] ?? 'Product Name',
-                                  style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
-                                ),
-                                SizedBox(height: 4.h),
-                                Text(
-                                  "৳${prod['price']} per ${prod['unit'] ?? 'pcs'}",
-                                  style: TextStyle(fontSize: 14.sp, color: const Color(0xFF2563EB), fontWeight: FontWeight.w600),
-                                ),
-                                SizedBox(height: 4.h),
-                                Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
-                                  decoration: BoxDecoration(
-                                    color: inStock ? const Color(0xFF16A34A).withOpacity(0.1) : const Color(0xFFDC2626).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(6.r),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.label_important, color: Color(0xFF2563EB)),
+                                  SizedBox(width: 6.w),
+                                  Text(
+                                    tagName.toUpperCase(),
+                                    style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
                                   ),
-                                  child: Text(
-                                    inStock ? "Available (Stock: ${prod['stock']})" : "Out of Stock",
-                                    style: TextStyle(
-                                      fontSize: 10.sp,
-                                      color: inStock ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                ],
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  db.startCall(
+                                    receiverPhone: vendor['phone'],
+                                    receiverName: vendor['name'],
+                                    receiverShopName: vendor['shopName'],
+                                    receiverArea: vendor['area'],
+                                    productName: tagName.toUpperCase(),
+                                  );
+                                  Fluttertoast.showToast(msg: "Calling ${vendor['shopName']} for $tagName...");
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+                                  elevation: 0,
+                                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
                                 ),
-                              ],
-                            ),
+                                icon: const Icon(Icons.phone, size: 12),
+                                label: const Text("Call", style: TextStyle(fontSize: 12)),
+                              ),
+                            ],
                           ),
-                          ElevatedButton.icon(
-                            onPressed: inStock
-                                ? () {
-                                    db.addToCart(prod, vendor);
-                                    Fluttertoast.showToast(msg: "${prod['name']} added to invoice");
-                                  }
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
-                              elevation: 0,
+                          if (subTags.isNotEmpty) ...[
+                            SizedBox(height: 8.h),
+                            Wrap(
+                              spacing: 8.w,
+                              runSpacing: 4.h,
+                              children: subTags.map((sub) {
+                                return ActionChip(
+                                  label: Text(
+                                    sub.toString().toUpperCase(),
+                                    style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w600, color: const Color(0xFF2563EB)),
+                                  ),
+                                  backgroundColor: const Color(0xFF2563EB).withOpacity(0.06),
+                                  onPressed: () {
+                                    db.startCall(
+                                      receiverPhone: vendor['phone'],
+                                      receiverName: vendor['name'],
+                                      receiverShopName: vendor['shopName'],
+                                      receiverArea: vendor['area'],
+                                      productName: sub.toString().toUpperCase(),
+                                    );
+                                    Fluttertoast.showToast(msg: "Calling ${vendor['shopName']} for $sub...");
+                                  },
+                                );
+                              }).toList(),
                             ),
-                            icon: const Icon(Icons.add_shopping_cart, size: 16),
-                            label: const Text("Add"),
-                          ),
+                          ],
                         ],
                       ),
                     );
@@ -162,17 +177,6 @@ class VendorProductScreen extends StatelessWidget {
           ],
         ),
       ),
-      floatingActionButton: Obx(() {
-        if (db.cartItems.isEmpty) return const SizedBox.shrink();
-        return FloatingActionButton.extended(
-          onPressed: () {
-            Get.to(() => const InvoiceCreationScreen());
-          },
-          backgroundColor: const Color(0xFF2563EB),
-          icon: const Icon(Icons.receipt_long),
-          label: Text("Create Invoice (${db.cartItems.length})"),
-        );
-      }),
     );
   }
 }

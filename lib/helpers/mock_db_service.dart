@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class MockDbService extends GetxController {
   static MockDbService get to => Get.find<MockDbService>();
@@ -25,6 +27,9 @@ class MockDbService extends GetxController {
 
   // Cart for invoice generation
   final RxList<Map<String, dynamic>> cartItems = <Map<String, dynamic>>[].obs;
+
+  // Active call session state
+  final RxMap<String, dynamic> activeCall = <String, dynamic>{}.obs;
 
   // Pre-configured list of Areas
   final List<String> divisions = ['Dhaka', 'Chittagong', 'Rajshahi', 'Sylhet'];
@@ -106,7 +111,7 @@ class MockDbService extends GetxController {
 
     // Load products
     List<dynamic>? storedProducts = _box.read<List<dynamic>>('products');
-    if (storedProducts != null && storedProducts.isNotEmpty) {
+    if (storedProducts != null && storedProducts.isNotEmpty && storedProducts.any((p) => (p as Map).containsKey('tags'))) {
       products.assignAll(storedProducts.map((e) => Map<String, dynamic>.from(e)).toList());
     } else {
 
@@ -121,7 +126,8 @@ class MockDbService extends GetxController {
           'price': 1200.0,
           'stock': 15,
           'unit': 'pcs',
-          'isAvailable': true
+          'isAvailable': true,
+          'tags': ['charger', 'samsung', 'adapter', 'fast charging']
         },
         {
           'id': 'p2',
@@ -132,7 +138,8 @@ class MockDbService extends GetxController {
           'price': 250.0,
           'stock': 40,
           'unit': 'pcs',
-          'isAvailable': true
+          'isAvailable': true,
+          'tags': ['cable', 'usb', 'type-c', 'data cable']
         },
         {
           'id': 'p3',
@@ -143,7 +150,8 @@ class MockDbService extends GetxController {
           'price': 3400.0,
           'stock': 100,
           'unit': 'bag',
-          'isAvailable': true
+          'isAvailable': true,
+          'tags': ['rice', 'chaul', 'groceries', 'miniket']
         },
         {
           'id': 'p4',
@@ -154,7 +162,8 @@ class MockDbService extends GetxController {
           'price': 30.0,
           'stock': 500,
           'unit': 'strip',
-          'isAvailable': true
+          'isAvailable': true,
+          'tags': ['napa', 'medicine', 'tablet', 'fever', 'paracetamol']
         }
       ]);
       _saveProducts();
@@ -162,8 +171,44 @@ class MockDbService extends GetxController {
 
     // Load invoices
     List<dynamic>? storedInvoices = _box.read<List<dynamic>>('invoices');
-    if (storedInvoices != null) {
+    if (storedInvoices != null && storedInvoices.isNotEmpty) {
       invoices.assignAll(storedInvoices.map((e) => Map<String, dynamic>.from(e)).toList());
+    } else {
+      // Seed default mock invoices
+      invoices.assignAll([
+        {
+          'id': 'INV-10001',
+          'customerPhone': '018122200',
+          'customerName': 'Regular Customer',
+          'vendorPhone': '01711111111',
+          'vendorShopName': 'Rahman Electronics',
+          'vendorArea': 'Kaliganj Bazar',
+          'items': [
+            {'id': 'p1', 'name': 'Samsung Charger 25W', 'price': 1200.0, 'qty': 1},
+            {'id': 'p2', 'name': 'USB Type-C Cable', 'price': 250.0, 'qty': 2}
+          ],
+          'subtotal': 1700.0,
+          'discount': 0.0,
+          'total': 1700.0,
+          'dateTime': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
+        },
+        {
+          'id': 'INV-10002',
+          'customerPhone': '018122200',
+          'customerName': 'Regular Customer',
+          'vendorPhone': '01733333333',
+          'vendorShopName': 'Selim Pharmacy',
+          'vendorArea': 'Tumulia',
+          'items': [
+            {'id': 'p4', 'name': 'Napa Extra Tab', 'price': 30.0, 'qty': 5}
+          ],
+          'subtotal': 150.0,
+          'discount': 0.0,
+          'total': 150.0,
+          'dateTime': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
+        }
+      ]);
+      saveInvoices();
     }
 
     // Load search requests
@@ -182,19 +227,19 @@ class MockDbService extends GetxController {
 
   void _saveVendors() => _box.write('vendors', vendors.toList());
   void _saveProducts() => _box.write('products', products.toList());
-  void _saveInvoices() => _box.write('invoices', invoices.toList());
+  void saveInvoices() => _box.write('invoices', invoices.toList());
   void _saveSearchRequests() => _box.write('searchRequests', searchRequests.toList());
 
   // Sign In
   bool signIn(String phone, String password, String role) {
     if (role == 'customer') {
-      currentUser.value = {
+      currentUser.assignAll({
         'name': 'Regular Customer',
         'phone': phone,
         'role': 'customer',
-      };
+      });
       currentRole.value = 'customer';
-      _box.write('currentUser', currentUser.value);
+      _box.write('currentUser', currentUser);
       _box.write('currentRole', 'customer');
       return true;
     } else {
@@ -220,9 +265,9 @@ class MockDbService extends GetxController {
         vendors.add(vendor);
         _saveVendors();
       }
-      currentUser.value = vendor;
+      currentUser.assignAll(vendor);
       currentRole.value = 'vendor';
-      _box.write('currentUser', currentUser.value);
+      _box.write('currentUser', currentUser);
       _box.write('currentRole', 'vendor');
       return true;
     }
@@ -231,13 +276,13 @@ class MockDbService extends GetxController {
 
   // Register Customer
   void registerCustomer(String phone, String name) {
-    currentUser.value = {
+    currentUser.assignAll({
       'name': name,
       'phone': phone,
       'role': 'customer',
-    };
+    });
     currentRole.value = 'customer';
-    _box.write('currentUser', currentUser.value);
+    _box.write('currentUser', currentUser);
     _box.write('currentRole', 'customer');
   }
 
@@ -248,11 +293,35 @@ class MockDbService extends GetxController {
     }
     vendors.add(vendorData);
     _saveVendors();
-    currentUser.value = vendorData;
+    currentUser.assignAll(vendorData);
     currentRole.value = 'vendor';
-    _box.write('currentUser', currentUser.value);
+    _box.write('currentUser', currentUser);
     _box.write('currentRole', 'vendor');
     return true;
+  }
+
+  // Update profile
+  void updateUserProfile({required String name, String? shopName, String? email, String? address}) {
+    currentUser['name'] = name;
+    if (shopName != null) currentUser['shopName'] = shopName;
+    if (email != null) currentUser['email'] = email;
+    if (address != null) currentUser['address'] = address;
+    currentUser.refresh();
+    _box.write('currentUser', currentUser);
+
+    // If vendor, update in global list
+    if (currentRole.value == 'vendor') {
+      int idx = vendors.indexWhere((v) => v['phone'] == currentUser['phone']);
+      if (idx != -1) {
+        var updated = Map<String, dynamic>.from(vendors[idx]);
+        updated['name'] = name;
+        if (shopName != null) updated['shopName'] = shopName;
+        if (email != null) updated['email'] = email;
+        if (address != null) updated['address'] = address;
+        vendors[idx] = updated;
+        _saveVendors();
+      }
+    }
   }
 
   // Logout
@@ -348,8 +417,165 @@ class MockDbService extends GetxController {
     };
 
     invoices.insert(0, newInvoice);
-    _saveInvoices();
+    saveInvoices();
     cartItems.clear();
     return newInvoice;
+  }
+
+  // Call methods
+  void startCall({
+    required String receiverPhone,
+    required String receiverName,
+    required String receiverShopName,
+    required String receiverArea,
+    String? productName,
+  }) {
+    activeCall.assignAll({
+      'id': 'call_${DateTime.now().millisecondsSinceEpoch}',
+      'status': 'dialing', // 'dialing', 'active', 'ended'
+      'callerRole': currentRole.value,
+      'callerPhone': currentUser['phone'] ?? '01700000000',
+      'callerName': currentUser['name'] ?? 'Regular Customer',
+      'receiverPhone': receiverPhone,
+      'receiverName': receiverName,
+      'receiverShopName': receiverShopName,
+      'receiverArea': receiverArea,
+      'productName': productName,
+      'items': <Map<String, dynamic>>[],
+      'invoiceGenerated': null,
+    });
+    
+    // Auto-accept call after 2 seconds to simulate vendor answering
+    Future.delayed(const Duration(seconds: 2), () {
+      if (activeCall.isNotEmpty && activeCall['status'] == 'dialing') {
+        acceptCall();
+      }
+    });
+  }
+
+  void acceptCall() {
+    if (activeCall.isNotEmpty) {
+      activeCall['status'] = 'active';
+      activeCall.refresh();
+    }
+  }
+
+  void endCall() {
+    activeCall.clear();
+  }
+
+  void addCallCartItem(Map<String, dynamic> product) {
+    if (activeCall.isEmpty) return;
+    List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(activeCall['items'] ?? []);
+    int idx = items.indexWhere((item) => item['id'] == product['id']);
+    if (idx != -1) {
+      items[idx]['qty'] = items[idx]['qty'] + 1;
+    } else {
+      items.add({
+        'id': product['id'],
+        'name': product['name'],
+        'price': product['price'],
+        'qty': 1,
+      });
+    }
+    activeCall['items'] = items;
+    activeCall.refresh();
+  }
+
+  void updateCallCartQty(String id, int qty) {
+    if (activeCall.isEmpty) return;
+    List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(activeCall['items'] ?? []);
+    int idx = items.indexWhere((item) => item['id'] == id);
+    if (idx != -1) {
+      if (qty <= 0) {
+        items.removeAt(idx);
+      } else {
+        items[idx]['qty'] = qty;
+      }
+    }
+    activeCall['items'] = items;
+    activeCall.refresh();
+  }
+
+  Map<String, dynamic> generateCallInvoice() {
+    if (activeCall.isEmpty) return {};
+    List<Map<String, dynamic>> items = List<Map<String, dynamic>>.from(activeCall['items'] ?? []);
+    if (items.isEmpty) return {};
+
+    double subtotal = 0;
+    for (var item in items) {
+      subtotal += item['price'] * item['qty'];
+    }
+
+    String invId = 'INV-${(invoices.length + 10001).toString()}';
+    var newInvoice = {
+      'id': invId,
+      'customerPhone': activeCall['callerRole'] == 'customer' ? activeCall['callerPhone'] : activeCall['receiverPhone'],
+      'customerName': activeCall['callerRole'] == 'customer' ? activeCall['callerName'] : activeCall['receiverName'],
+      'vendorPhone': activeCall['callerRole'] == 'vendor' ? activeCall['callerPhone'] : activeCall['receiverPhone'],
+      'vendorShopName': activeCall['receiverShopName'] ?? 'Shop',
+      'vendorArea': activeCall['receiverArea'] ?? 'Area',
+      'items': items,
+      'subtotal': subtotal,
+      'discount': 0.0,
+      'total': subtotal,
+      'dateTime': DateTime.now().toIso8601String(),
+    };
+
+    invoices.insert(0, newInvoice);
+    saveInvoices();
+    
+    activeCall['invoiceGenerated'] = newInvoice;
+    activeCall.refresh();
+    
+    return newInvoice;
+  }
+
+  Future<void> determineAndSetRealLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      Fluttertoast.showToast(msg: "Location services are disabled.");
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        Fluttertoast.showToast(msg: "Location permissions are denied.");
+        return;
+      }
+    }
+    
+    if (permission == LocationPermission.deniedForever) {
+      Fluttertoast.showToast(msg: "Location permissions are permanently denied.");
+      return;
+    } 
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+      
+      Fluttertoast.showToast(
+        msg: "Real Location: Lat ${position.latitude.toStringAsFixed(4)}, Lng ${position.longitude.toStringAsFixed(4)}!",
+        toastLength: Toast.LENGTH_LONG,
+      );
+      
+      // Update in db
+      currentArea.value = "Gazipur Sadar";
+      currentUpazila.value = "Gazipur";
+      
+      if (currentUser.isNotEmpty) {
+        currentUser['area'] = "Gazipur Sadar";
+        currentUser['upazila'] = "Gazipur";
+        currentUser.refresh();
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Failed to get location: $e");
+    }
   }
 }

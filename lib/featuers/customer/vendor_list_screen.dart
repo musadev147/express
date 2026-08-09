@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'vendor_product_screen.dart';
+import '../../helpers/mock_db_service.dart';
 
 class VendorListScreen extends StatelessWidget {
   final Map<String, dynamic> product;
@@ -10,16 +11,14 @@ class VendorListScreen extends StatelessWidget {
 
   const VendorListScreen({super.key, required this.product, required this.vendors});
 
-  void _callVendor(String phoneNumber) async {
-    final Uri launchUri = Uri(
-      scheme: 'tel',
-      path: phoneNumber,
+  void _callVendor(Map<String, dynamic> vendor) {
+    MockDbService.to.startCall(
+      receiverPhone: vendor['phone'] ?? '',
+      receiverName: vendor['name'] ?? '',
+      receiverShopName: vendor['shopName'] ?? '',
+      receiverArea: vendor['area'] ?? '',
+      productName: product['name'],
     );
-    if (await canLaunchUrl(launchUri)) {
-      await launchUrl(launchUri);
-    } else {
-      Get.snackbar("Error", "Could not open dialer for number: $phoneNumber");
-    }
   }
 
   @override
@@ -142,7 +141,7 @@ class VendorListScreen extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: () => _callVendor(vendor['phone']),
+                                      onPressed: () => _callVendor(vendor),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: const Color(0xFF2563EB),
                                         side: const BorderSide(color: Color(0xFF2563EB)),

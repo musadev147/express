@@ -36,6 +36,45 @@ class VendorInvoicesScreen extends StatelessWidget {
             return inv['vendorPhone'] == db.currentUser['phone'];
           }).toList();
 
+          if (vendorInvoices.isEmpty && db.currentUser['phone'] != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              db.invoices.addAll([
+                {
+                  'id': 'INV-90001',
+                  'customerPhone': '018122200',
+                  'customerName': 'Regular Customer',
+                  'vendorPhone': db.currentUser['phone'],
+                  'vendorShopName': db.currentUser['shopName'] ?? 'My Shop',
+                  'vendorArea': db.currentUser['area'] ?? 'My Area',
+                  'items': [
+                    {'id': 'p1', 'name': 'Standard Retail Item A', 'price': 850.0, 'qty': 2},
+                    {'id': 'p2', 'name': 'Sample Product B', 'price': 120.0, 'qty': 1}
+                  ],
+                  'subtotal': 1820.0,
+                  'discount': 0.0,
+                  'total': 1820.0,
+                  'dateTime': DateTime.now().subtract(const Duration(hours: 1)).toIso8601String(),
+                },
+                {
+                  'id': 'INV-90002',
+                  'customerPhone': '01999999999',
+                  'customerName': 'Walk-in Client',
+                  'vendorPhone': db.currentUser['phone'],
+                  'vendorShopName': db.currentUser['shopName'] ?? 'My Shop',
+                  'vendorArea': db.currentUser['area'] ?? 'My Area',
+                  'items': [
+                    {'id': 'p3', 'name': 'Express Order Pack', 'price': 340.0, 'qty': 1}
+                  ],
+                  'subtotal': 340.0,
+                  'discount': 0.0,
+                  'total': 340.0,
+                  'dateTime': DateTime.now().subtract(const Duration(days: 2)).toIso8601String(),
+                }
+              ]);
+              db.saveInvoices();
+            });
+          }
+
           if (vendorInvoices.isEmpty) {
             return Center(
               child: Column(

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../../helpers/mock_db_service.dart';
-import '../../route/app_pages.dart';
 import 'vendor_product_mgmt_screen.dart';
 import 'search_request_screen.dart';
 
@@ -93,6 +92,18 @@ class VendorDashboardScreen extends StatelessWidget {
                 var myProducts = db.products.where((p) => p['vendorPhone'] == phone).toList();
                 var myInvoices = db.invoices.where((inv) => inv['vendorPhone'] == phone).toList();
 
+                // Extract unique tags count
+                var allTags = <String>{};
+                for (var p in myProducts) {
+                  List<dynamic> tagsList = p['tags'] ?? [];
+                  for (var t in tagsList) {
+                    if (t.toString().trim().isNotEmpty) {
+                      allTags.add(t.toString().trim().toUpperCase());
+                    }
+                  }
+                }
+                var myTagsCount = allTags.length;
+
                 double totalSales = 0;
                 for (var inv in myInvoices) {
                   totalSales += inv['total'] ?? 0;
@@ -104,9 +115,9 @@ class VendorDashboardScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _buildStatCard(
-                            "My Products",
-                            "${myProducts.length}",
-                            Icons.inventory_2,
+                            "Active Tags",
+                            "$myTagsCount",
+                            Icons.tag,
                             const Color(0xFF2563EB),
                           ),
                         ),
@@ -172,25 +183,23 @@ class VendorDashboardScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _buildActionButton(
-                      "Add Product",
-                      Icons.add_box,
+                      "Manage Tags",
+                      Icons.tag,
                       const Color(0xFF16A34A),
                       () {
-                        if (onTabChange != null) {
-                          onTabChange!(1); // Go to Products tab
-                        }
+                        Get.to(() => const VendorProductMgmtScreen());
                       },
                     ),
                   ),
                   SizedBox(width: 12.w),
                   Expanded(
                     child: _buildActionButton(
-                      "Products List",
-                      Icons.list_alt,
+                      "My Wallet",
+                      Icons.account_balance_wallet,
                       const Color(0xFF2563EB),
                       () {
                         if (onTabChange != null) {
-                          onTabChange!(1); // Go to Products tab
+                          onTabChange!(1); // Go to Wallet tab (index 1)
                         }
                       },
                     ),
@@ -203,7 +212,7 @@ class VendorDashboardScreen extends StatelessWidget {
                       const Color(0xFFF59E0B),
                       () {
                         if (onTabChange != null) {
-                          onTabChange!(2); // Go to Invoices tab
+                          onTabChange!(2); // Go to Invoices tab (index 2)
                         }
                       },
                     ),

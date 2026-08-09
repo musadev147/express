@@ -9,6 +9,7 @@ import 'package:get_storage/get_storage.dart';
 import 'package:provider/provider.dart';
 import 'constants/app_colors.dart';
 
+import 'helpers/gemini_service.dart';
 import 'helpers/di.dart';
 import 'helpers/helper_methods.dart';
 import 'helpers/navigation_service.dart';
@@ -19,15 +20,13 @@ import 'common_wigdets/splash_screen.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
 
-
-
-
 void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
 
   await GetStorage.init();
   diSetup();
+  GeminiService.to.init();
   initiInternetChecker();
   DioSingleton.instance.create();
 
