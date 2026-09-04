@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:geolocator/geolocator.dart';
@@ -43,13 +42,65 @@ class MockDbService extends GetxController {
     'Dhaka': ['Mirpur', 'Dhanmondi', 'Gulshan'],
     'Gazipur': ['Kaliganj', 'Sreepur', 'Gazipur Sadar'],
     'Narayanganj': ['Sadar', 'Rupganj', 'Araihazar'],
+    'Chittagong': ['Pahartali', 'Kotwali', 'Panchlaish'],
+    'Cox\'s Bazar': ['Sadar', 'Teknaf', 'Ramu'],
+    'Feni': ['Feni Sadar', 'Chhagalnaiya'],
+    'Rajshahi': ['Boalia', 'Motihar', 'Rajpara'],
+    'Bogra': ['Bogra Sadar', 'Sherpur'],
+    'Pabna': ['Pabna Sadar', 'Ishwardi'],
+    'Sylhet': ['Sylhet Sadar', 'Beanibazar'],
+    'Moulvibazar': ['Sreemangal', 'Kulaura'],
+    'Habiganj': ['Habiganj Sadar', 'Madhabpur'],
   };
   final Map<String, List<String>> areas = {
     'Kaliganj': ['Kaliganj Bazar', 'Tumulia', 'Nagari', 'Jangal'],
     'Sreepur': ['Maona', 'Sreepur Bazar', 'Telihati'],
+    'Gazipur Sadar': ['Joydebpur', 'Chowrasta', 'Board Bazar'],
     'Mirpur': ['Mirpur 1', 'Mirpur 10', 'Mirpur 12'],
     'Dhanmondi': ['Dhanmondi 32', 'Dhanmondi 15', 'Sobhanbagh'],
+    'Gulshan': ['Gulshan 1', 'Gulshan 2', 'Niketan'],
+    'Sadar': ['Sadar Bazar', 'Station Road'],
+    'Rupganj': ['Murapara', 'Bhulta'],
+    'Araihazar': ['Araihazar Bazar', 'Gopaldi'],
+    'Pahartali': ['Pahartali Bazar', 'Khulshi'],
+    'Kotwali': ['New Market', 'Anderkilla'],
+    'Panchlaish': ['GEC Circle', '2 No Gate'],
+    'Teknaf': ['Teknaf Port', 'Shamlapur'],
+    'Ramu': ['Ramu Bazar'],
+    'Feni Sadar': ['Trunk Road', 'Grand Trunk'],
+    'Chhagalnaiya': ['Chhagalnaiya Bazar'],
+    'Boalia': ['Saheb Bazar', 'Alupatti'],
+    'Motihar': ['RU Campus', 'Kajla'],
+    'Rajpara': ['Court Area', 'Laxmipur'],
+    'Bogra Sadar': ['Satmatha', 'Jaleshwaritola'],
+    'Sherpur': ['Sherpur Town'],
+    'Pabna Sadar': ['Abdul Hamid Road', 'Indira Mor'],
+    'Ishwardi': ['Ishwardi Bazar', 'Rooppur'],
+    'Sylhet Sadar': ['Zindabazar', 'Bandar Bazar', 'Amberkhana'],
+    'Beanibazar': ['Beanibazar Town'],
+    'Sreemangal': ['Chowmohoni', 'Station Road'],
+    'Kulaura': ['Kulaura Town'],
+    'Habiganj Sadar': ['Chowdhury Bazar'],
+    'Madhabpur': ['Madhabpur Bazar'],
   };
+
+  List<String> getDistrictsFor(String? division) {
+    if (division == null) return districts['Dhaka']!;
+    var list = districts[division];
+    return (list != null && list.isNotEmpty) ? list : (districts['Dhaka'] ?? ['Dhaka']);
+  }
+
+  List<String> getUpazilasFor(String? district) {
+    if (district == null) return upazilas['Dhaka']!;
+    var list = upazilas[district];
+    return (list != null && list.isNotEmpty) ? list : ['Sadar'];
+  }
+
+  List<String> getAreasFor(String? upazila) {
+    if (upazila == null) return ['Local Area'];
+    var list = areas[upazila];
+    return (list != null && list.isNotEmpty) ? list : ['Local Area'];
+  }
 
   @override
   void onInit() {

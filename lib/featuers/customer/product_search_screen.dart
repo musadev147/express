@@ -3,6 +3,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../helpers/mock_db_service.dart';
+import '../../networks/api_acess.dart';
+import '../../networks/model/product_model.dart';
+import '../../networks/model/search_demand_model.dart';
 import 'vendor_list_screen.dart';
 
 class ProductSearchScreen extends StatefulWidget {
@@ -19,6 +22,8 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
   final _searchController = TextEditingController();
   final RxString _selectedCategory = 'All'.obs;
   final List<String> categories = ['All', 'Electronics', 'Grocery', 'Medicine', 'Hardware', 'Clothing', 'Others'];
+  List<ProductResponse> _apiSearchResults = [];
+  bool _isSearching = false;
 
   void _autoCallVendorForQuery(String query) {
     var db = MockDbService.to;
@@ -58,6 +63,47 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
     Fluttertoast.showToast(msg: "No local vendors found matching tags for '$query'");
   }
 
+  Future<void> _executeSearch(String query) async {
+    if (query.trim().isEmpty) return;
+    setState(() {
+      _isSearching = true;
+    });
+
+    // 1. Broadcast search demand
+    try {
+      createSearchDemandRx.createSearchDemand(
+        SearchDemandCreateRequest(
+          query: query.trim(),
+          area: db.currentArea.value,
+          upazila: db.currentUpazila.value,
+          district: db.currentDistrict.value,
+          division: db.currentDivision.value,
+        ),
+      );
+    } catch (_) {}
+
+    // 2. Fetch live search API
+    try {
+      var cat = _selectedCategory.value != 'All' ? _selectedCategory.value : null;
+      var response = await searchProductsRx.searchProducts(
+        query: query.trim(),
+        area: db.currentArea.value,
+        category: cat,
+      );
+      if (response.success && response.data != null) {
+        setState(() {
+          _apiSearchResults = response.data!;
+          _isSearching = false;
+        });
+        return;
+      }
+    } catch (_) {}
+
+    setState(() {
+      _isSearching = false;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +112,7 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
       // Trigger request recording
       Future.delayed(Duration.zero, () {
         db.addSearchRequest(widget.initialQuery!, db.currentArea.value);
+        _executeSearch(widget.initialQuery!);
       });
       // Auto call vendor
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -148,32 +195,30 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                         fillColor: Colors.white,
                       ),
                       onSubmitted: (val) {
-                        setState(() {
-                          if (val.isNotEmpty) {
-                            db.addSearchRequest(val, db.currentArea.value);
-                            _autoCallVendorForQuery(val);
-                          }
-                        });
+                        if (val.isNotEmpty) {
+                          db.addSearchRequest(val, db.currentArea.value);
+                          _executeSearch(val);
+                          _autoCallVendorForQuery(val);
+                        }
                       },
                     ),
                   ),
                   SizedBox(width: 8.w),
                   ElevatedButton(
                     onPressed: () {
-                      setState(() {
-                        String val = _searchController.text.trim();
-                        if (val.isNotEmpty) {
-                          db.addSearchRequest(val, db.currentArea.value);
-                          _autoCallVendorForQuery(val);
-                        }
-                      });
+                      String val = _searchController.text.trim();
+                      if (val.isNotEmpty) {
+                        db.addSearchRequest(val, db.currentArea.value);
+                        _executeSearch(val);
+                        _autoCallVendorForQuery(val);
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
                       padding: EdgeInsets.symmetric(vertical: 16.h),
                     ),
-                    child: const Text("Search"),
+                    child: const Text("Search", style: TextStyle(color: Colors.white)),
                   ),
                 ],
               ),
@@ -192,6 +237,9 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
                     return GestureDetector(
                       onTap: () {
                         _selectedCategory.value = categories[index];
+                        if (_searchController.text.isNotEmpty) {
+                          _executeSearch(_searchController.text);
+                        }
                       },
                       child: Container(
                         margin: EdgeInsets.only(right: 8.w),
@@ -220,143 +268,170 @@ class _ProductSearchScreenState extends State<ProductSearchScreen> {
             ),
             SizedBox(height: 16.h),
 
-            // Search results list showing only tags
+            // Search results
             Expanded(
-              child: Obx(() {
-                String query = _searchController.text.trim().toLowerCase();
-                String category = _selectedCategory.value;
-                String area = db.currentArea.value;
+              child: _isSearching
+                  ? const Center(child: CircularProgressIndicator())
+                  : Obx(() {
+                      String query = _searchController.text.trim().toLowerCase();
+                      String category = _selectedCategory.value;
+                      String area = db.currentArea.value;
 
-                // Match globally registered product names, tags, and sub-tags
-                var matchingProducts = db.products.where((p) {
-                  List<dynamic> tagsList = p['tags'] ?? [];
-                  List<dynamic> subTagsList = p['subTags'] ?? [];
-                  bool matchesQuery = query.isEmpty || 
-                      p['name'].toString().toLowerCase().contains(query) ||
-                      tagsList.any((tag) => tag.toString().toLowerCase().contains(query)) ||
-                      subTagsList.any((sub) => sub.toString().toLowerCase().contains(query));
-                  bool matchesCat = category == 'All' || p['category'].toString().toLowerCase() == category.toLowerCase();
-                  return matchesQuery && matchesCat;
-                }).toList();
-
-                // Extract unique tags and sub-tags matching query
-                var allTags = <String>{};
-                for (var p in matchingProducts) {
-                  List<dynamic> tagsList = p['tags'] ?? [];
-                  List<dynamic> subTagsList = p['subTags'] ?? [];
-                  for (var t in tagsList) {
-                    String tagStr = t.toString().trim();
-                    if (tagStr.isNotEmpty && (query.isEmpty || tagStr.toLowerCase().contains(query))) {
-                      allTags.add(tagStr);
-                    }
-                  }
-                  for (var s in subTagsList) {
-                    String subStr = s.toString().trim();
-                    if (subStr.isNotEmpty && (query.isEmpty || subStr.toLowerCase().contains(query))) {
-                      allTags.add(subStr);
-                    }
-                  }
-                }
-                var matchingTags = allTags.toList();
-
-                if (matchingTags.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.tag, size: 64, color: Color(0xFF6E6E86)),
-                        SizedBox(height: 12.h),
-                        const Text("No tags found.", style: TextStyle(color: Color(0xFF6E6E86), fontWeight: FontWeight.bold)),
-                        SizedBox(height: 4.h),
-                        Text(
-                          "We notified vendors in $area about your request!",
-                          style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6E6E86)),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w),
-                  itemCount: matchingTags.length,
-                  itemBuilder: (context, idx) {
-                    var tag = matchingTags[idx];
-
-                    // Find vendors selling products with this tag or sub-tag in target area
-                    var vendorsWithTag = <Map<String, dynamic>>[];
-                    var prodsWithTag = db.products.where((p) {
-                      List<dynamic> tagsList = p['tags'] ?? [];
-                      List<dynamic> subTagsList = p['subTags'] ?? [];
-                      return tagsList.any((t) => t.toString().toLowerCase() == tag.toLowerCase()) ||
-                             subTagsList.any((s) => s.toString().toLowerCase() == tag.toLowerCase());
-                    }).toList();
-                    
-                    for (var prod in prodsWithTag) {
-                      var matchingVendors = db.vendors.where((v) {
-                        return v['area'] == area && v['phone'] == prod['vendorPhone'];
+                      // Match globally registered product names, tags, and sub-tags
+                      var matchingProducts = db.products.where((p) {
+                        List<dynamic> tagsList = p['tags'] ?? [];
+                        List<dynamic> subTagsList = p['subTags'] ?? [];
+                        bool matchesQuery = query.isEmpty ||
+                            p['name'].toString().toLowerCase().contains(query) ||
+                            tagsList.any((tag) => tag.toString().toLowerCase().contains(query)) ||
+                            subTagsList.any((sub) => sub.toString().toLowerCase().contains(query));
+                        bool matchesCat = category == 'All' || p['category'].toString().toLowerCase() == category.toLowerCase();
+                        return matchesQuery && matchesCat;
                       }).toList();
-                      vendorsWithTag.addAll(matchingVendors);
-                    }
-                    var seen = <String>{};
-                    vendorsWithTag.retainWhere((v) => seen.add(v['phone']));
 
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 12.h),
-                      padding: EdgeInsets.all(16.r),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16.r),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10, offset: const Offset(0, 4)),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      // Extract unique tags and sub-tags matching query
+                      var allTags = <String>{};
+                      for (var p in matchingProducts) {
+                        List<dynamic> tagsList = p['tags'] ?? [];
+                        List<dynamic> subTagsList = p['subTags'] ?? [];
+                        for (var t in tagsList) {
+                          String tagStr = t.toString().trim();
+                          if (tagStr.isNotEmpty && (query.isEmpty || tagStr.toLowerCase().contains(query))) {
+                            allTags.add(tagStr);
+                          }
+                        }
+                        for (var st in subTagsList) {
+                          String subStr = st.toString().trim();
+                          if (subStr.isNotEmpty && (query.isEmpty || subStr.toLowerCase().contains(query))) {
+                            allTags.add(subStr);
+                          }
+                        }
+                        if (p['name'].toString().toLowerCase().contains(query)) {
+                          allTags.add(p['name'].toString());
+                        }
+                      }
+
+                      // If also has API search results, add tags
+                      for (var ap in _apiSearchResults) {
+                        allTags.add(ap.name);
+                        for (var t in ap.tags) {
+                          allTags.add(t);
+                        }
+                      }
+
+                      var tagList = allTags.toList();
+
+                      if (tagList.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.tag, size: 18, color: Color(0xFF2563EB)),
-                                    SizedBox(width: 4.w),
-                                    Expanded(
-                                      child: Text(
-                                        tag.toUpperCase(),
-                                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
+                              const Icon(Icons.search_off, size: 64, color: Color(0xFF6E6E86)),
+                              SizedBox(height: 12.h),
+                              Text("No tags or products match '$query'", style: const TextStyle(color: Color(0xFF6E6E86))),
+                              SizedBox(height: 12.h),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2563EB).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20.r),
                                 ),
-                              ),
-                              SizedBox(width: 8.w),
-                              ElevatedButton.icon(
-                                onPressed: () => _callVendorForTag(tag),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2563EB),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
-                                  elevation: 0,
-                                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                                child: Text(
+                                  "Broadcasted to local $area vendors!",
+                                  style: TextStyle(color: const Color(0xFF2563EB), fontSize: 12.sp, fontWeight: FontWeight.bold),
                                 ),
-                                icon: const Icon(Icons.phone, size: 14),
-                                label: const Text("Call"),
                               ),
                             ],
                           ),
-                          SizedBox(height: 6.h),
-                          Text(
-                            "Available Shops: ${vendorsWithTag.length} in $area",
-                            style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6E6E86)),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              }),
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: EdgeInsets.symmetric(horizontal: 16.w),
+                        itemCount: tagList.length,
+                        itemBuilder: (context, idx) {
+                          String tag = tagList[idx];
+                          var localVendorsWithTag = db.vendors.where((v) {
+                            return v['area'] == area &&
+                                db.products.any((p) =>
+                                    p['vendorPhone'] == v['phone'] &&
+                                    ((p['tags'] != null && (p['tags'] as List).any((t) => t.toString().toLowerCase() == tag.toLowerCase())) ||
+                                        (p['subTags'] != null && (p['subTags'] as List).any((st) => st.toString().toLowerCase() == tag.toLowerCase())) ||
+                                        p['name'].toString().toLowerCase() == tag.toLowerCase()));
+                          }).toList();
+
+                          return Container(
+                            margin: EdgeInsets.only(bottom: 12.h),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16.r),
+                              border: Border.all(color: Colors.black.withOpacity(0.04)),
+                            ),
+                            child: ListTile(
+                              contentPadding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
+                              leading: CircleAvatar(
+                                backgroundColor: const Color(0xFF2563EB).withOpacity(0.1),
+                                child: const Icon(Icons.sell_outlined, color: Color(0xFF2563EB), size: 20),
+                              ),
+                              title: Text(
+                                tag,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15.sp, color: const Color(0xFF0F172A)),
+                              ),
+                              subtitle: Row(
+                                children: [
+                                  Icon(
+                                    localVendorsWithTag.isNotEmpty ? Icons.check_circle : Icons.info_outline,
+                                    size: 13.sp,
+                                    color: localVendorsWithTag.isNotEmpty ? const Color(0xFF16A34A) : const Color(0xFF6E6E86),
+                                  ),
+                                  SizedBox(width: 4.w),
+                                  Expanded(
+                                    child: Text(
+                                      localVendorsWithTag.isNotEmpty
+                                          ? "${localVendorsWithTag.length} store(s) in $area"
+                                          : "0 stores in $area",
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12.sp,
+                                        color: localVendorsWithTag.isNotEmpty ? const Color(0xFF16A34A) : const Color(0xFF6E6E86),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    constraints: const BoxConstraints(),
+                                    padding: EdgeInsets.symmetric(horizontal: 6.w),
+                                    icon: const Icon(Icons.phone, color: Color(0xFF16A34A), size: 22),
+                                    onPressed: () => _callVendorForTag(tag),
+                                  ),
+                                  SizedBox(width: 4.w),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      Get.to(() => VendorListScreen(productTag: tag));
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2563EB),
+                                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+                                      elevation: 0,
+                                    ),
+                                    child: Text("Stores", style: TextStyle(fontSize: 11.sp, color: Colors.white)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    }),
             ),
           ],
         ),

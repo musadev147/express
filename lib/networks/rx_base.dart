@@ -2,7 +2,7 @@ import 'dart:developer';
 import 'package:dio/dio.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:rxdart/subjects.dart';
-
+import '../common_wigdets/app_toast.dart';
 import 'exception_handler/data_source.dart';
 
 abstract class RxResponseInt<T> {
@@ -37,7 +37,7 @@ abstract class RxResponseInt<T> {
       errorMessage = error.toString().replaceFirst('Exception: ', '');
     }
 
-    // Show at top of screen using AppToast (uses showToast which respects toastPosition)
+    // Show at top of screen using AppToast
     AppToast.error(errorMessage);
 
     dataFetcher.sink.addError(error);

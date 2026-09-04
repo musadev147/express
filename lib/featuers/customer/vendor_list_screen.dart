@@ -1,28 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'vendor_product_screen.dart';
 import '../../helpers/mock_db_service.dart';
 
 class VendorListScreen extends StatelessWidget {
-  final Map<String, dynamic> product;
-  final List<Map<String, dynamic>> vendors;
+  final Map<String, dynamic>? product;
+  final List<Map<String, dynamic>>? vendors;
+  final String? productTag;
 
-  const VendorListScreen({super.key, required this.product, required this.vendors});
+  const VendorListScreen({
+    super.key,
+    this.product,
+    this.vendors,
+    this.productTag,
+  });
 
-  void _callVendor(Map<String, dynamic> vendor) {
+  void _callVendor(Map<String, dynamic> vendor, String prodName) {
     MockDbService.to.startCall(
       receiverPhone: vendor['phone'] ?? '',
       receiverName: vendor['name'] ?? '',
       receiverShopName: vendor['shopName'] ?? '',
       receiverArea: vendor['area'] ?? '',
-      productName: product['name'],
+      productName: prodName,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    var db = MockDbService.to;
+    String area = db.currentArea.value;
+
+    String displayTag = productTag ?? product?['name'] ?? 'Product';
+    String displayCategory = product?['category'] ?? 'All Categories';
+    String displayPrice = product?['price'] != null ? "৳${product!['price']}" : "Local Store Pricing";
+
+    // Resolve list of vendors
+    List<Map<String, dynamic>> resolvedVendors = [];
+    if (vendors != null) {
+      resolvedVendors = vendors!;
+    } else {
+      String target = displayTag.trim().toLowerCase();
+      resolvedVendors = db.vendors.where((v) {
+        return v['area'] == area &&
+            db.products.any((p) =>
+                p['vendorPhone'] == v['phone'] &&
+                ((p['tags'] != null && (p['tags'] as List).any((t) => t.toString().toLowerCase() == target)) ||
+                    (p['subTags'] != null && (p['subTags'] as List).any((st) => st.toString().toLowerCase() == target)) ||
+                    p['name'].toString().toLowerCase().contains(target)));
+      }).toList();
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -47,12 +75,12 @@ class VendorListScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Product: ${product['name']}",
+                    "Tag: $displayTag",
                     style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold, color: const Color(0xFF2563EB)),
                   ),
                   SizedBox(height: 2.h),
                   Text(
-                    "Estimated Price: ৳${product['price']} • Category: ${product['category']}",
+                    "Pricing: $displayPrice • $displayCategory • Area: $area",
                     style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6E6E86)),
                   ),
                 ],
@@ -61,26 +89,26 @@ class VendorListScreen extends StatelessWidget {
 
             // Vendor list
             Expanded(
-              child: vendors.isEmpty
+              child: resolvedVendors.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(Icons.storefront, size: 64, color: Color(0xFF6E6E86)),
                           SizedBox(height: 12.h),
-                          const Text(
-                            "No vendors currently match this search in your area.",
+                          Text(
+                            "No vendors currently match '$displayTag' in $area.",
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Color(0xFF6E6E86)),
+                            style: const TextStyle(color: Color(0xFF6E6E86)),
                           ),
                         ],
                       ),
                     )
                   : ListView.builder(
                       padding: EdgeInsets.all(16.r),
-                      itemCount: vendors.length,
+                      itemCount: resolvedVendors.length,
                       itemBuilder: (context, index) {
-                        var vendor = vendors[index];
+                        var vendor = resolvedVendors[index];
 
                         return Container(
                           margin: EdgeInsets.only(bottom: 16.h),
@@ -111,11 +139,11 @@ class VendorListScreen extends StatelessWidget {
                                           style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
                                         ),
                                         Text(
-                                          "Owner: ${vendor['name']}",
+                                          "Owner: ${vendor['name'] ?? ''}",
                                           style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6E6E86)),
                                         ),
                                         Text(
-                                          "Area: ${vendor['area']}",
+                                          "Area: ${vendor['area'] ?? area}",
                                           style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6E6E86)),
                                         ),
                                       ],
@@ -125,11 +153,11 @@ class VendorListScreen extends StatelessWidget {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Text(
-                                        "৳${product['price']}",
-                                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold, color: const Color(0xFF16A34A)),
+                                        displayPrice,
+                                        style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.bold, color: const Color(0xFF16A34A)),
                                       ),
                                       Text(
-                                        "1.2 km away",
+                                        "${vendor['distanceKm'] ?? 1.2} km away",
                                         style: TextStyle(fontSize: 11.sp, color: const Color(0xFF6E6E86)),
                                       ),
                                     ],
@@ -141,7 +169,7 @@ class VendorListScreen extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: () => _callVendor(vendor),
+                                      onPressed: () => _callVendor(vendor, displayTag),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: const Color(0xFF2563EB),
                                         side: const BorderSide(color: Color(0xFF2563EB)),
@@ -164,7 +192,7 @@ class VendorListScreen extends StatelessWidget {
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
                                         elevation: 0,
                                       ),
-                                      child: const Text("View Products"),
+                                      child: const Text("View Products", style: TextStyle(color: Colors.white)),
                                     ),
                                   ),
                                 ],

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:get/get.dart';
 import '../../helpers/mock_db_service.dart';
+import '../../networks/api_acess.dart';
+import '../../networks/model/vendor_model.dart';
 import 'product_search_screen.dart';
 import 'vendor_product_screen.dart';
 
@@ -14,6 +16,41 @@ class CustomerHomeScreen extends StatefulWidget {
 
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   final _searchController = TextEditingController();
+  List<VendorMarketplaceItem> _apiVendors = [];
+  bool _isLoadingVendors = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocationHierarchy();
+    _fetchNearbyVendors();
+  }
+
+  Future<void> _loadLocationHierarchy() async {
+    try {
+      await locationHierarchyRx.fetchHierarchy();
+    } catch (_) {}
+  }
+
+  Future<void> _fetchNearbyVendors() async {
+    setState(() {
+      _isLoadingVendors = true;
+    });
+    try {
+      var area = MockDbService.to.currentArea.value;
+      var response = await getVendorsRx.fetchVendors(area: area);
+      if (response.success && response.data != null) {
+        setState(() {
+          _apiVendors = response.data!;
+          _isLoadingVendors = false;
+        });
+        return;
+      }
+    } catch (_) {}
+    setState(() {
+      _isLoadingVendors = false;
+    });
+  }
 
   void _showLocationDialog() {
     var db = MockDbService.to;
@@ -22,11 +59,48 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     String tempUpazila = db.currentUpazila.value;
     String tempArea = db.currentArea.value;
 
+    // Sanitize initial values
+    if (!db.divisions.contains(tempDiv)) {
+      tempDiv = db.divisions.isNotEmpty ? db.divisions.first : 'Dhaka';
+    }
+    List<String> initialDistricts = db.getDistrictsFor(tempDiv);
+    if (!initialDistricts.contains(tempDist)) {
+      tempDist = initialDistricts.isNotEmpty ? initialDistricts.first : 'Dhaka';
+    }
+    List<String> initialUpazilas = db.getUpazilasFor(tempDist);
+    if (!initialUpazilas.contains(tempUpazila)) {
+      tempUpazila = initialUpazilas.isNotEmpty ? initialUpazilas.first : 'Sadar';
+    }
+    List<String> initialAreas = db.getAreasFor(tempUpazila);
+    if (!initialAreas.contains(tempArea)) {
+      tempArea = initialAreas.isNotEmpty ? initialAreas.first : 'Local Area';
+    }
+
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            List<String> divList = db.divisions.toSet().toList();
+            if (!divList.contains(tempDiv) && divList.isNotEmpty) {
+              tempDiv = divList.first;
+            }
+
+            List<String> distList = db.getDistrictsFor(tempDiv).toSet().toList();
+            if (!distList.contains(tempDist) && distList.isNotEmpty) {
+              tempDist = distList.first;
+            }
+
+            List<String> upazilaList = db.getUpazilasFor(tempDist).toSet().toList();
+            if (!upazilaList.contains(tempUpazila) && upazilaList.isNotEmpty) {
+              tempUpazila = upazilaList.first;
+            }
+
+            List<String> areaList = db.getAreasFor(tempUpazila).toSet().toList();
+            if (!areaList.contains(tempArea) && areaList.isNotEmpty) {
+              tempArea = areaList.first;
+            }
+
             return AlertDialog(
               title: const Text("Select Area"),
               content: SingleChildScrollView(
@@ -34,51 +108,63 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Division dropdown
-                    DropdownButtonFormField<String>(
-                      value: tempDiv,
-                      decoration: const InputDecoration(labelText: "Division"),
-                      items: db.divisions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() {
-                            tempDiv = val;
-                            tempDist = db.districts[val]!.first;
-                            tempUpazila = db.upazilas[tempDist]!.first;
-                            tempArea = db.areas[tempUpazila] != null ? db.areas[tempUpazila]!.first : 'Local Area';
-                          });
-                        }
-                      },
-                    ),
+                    if (divList.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('div_$tempDiv'),
+                        value: tempDiv,
+                        decoration: const InputDecoration(labelText: "Division"),
+                        items: divList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              tempDiv = val;
+                              var newDists = db.getDistrictsFor(val);
+                              tempDist = newDists.isNotEmpty ? newDists.first : '';
+                              var newUpazilas = db.getUpazilasFor(tempDist);
+                              tempUpazila = newUpazilas.isNotEmpty ? newUpazilas.first : '';
+                              var newAreas = db.getAreasFor(tempUpazila);
+                              tempArea = newAreas.isNotEmpty ? newAreas.first : 'Local Area';
+                            });
+                          }
+                        },
+                      ),
                     SizedBox(height: 12.h),
 
                     // District dropdown
-                    DropdownButtonFormField<String>(
-                      value: tempDist,
-                      decoration: const InputDecoration(labelText: "District"),
-                      items: db.districts[tempDiv]!.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() {
-                            tempDist = val;
-                            tempUpazila = db.upazilas[val] != null ? db.upazilas[val]!.first : '';
-                            tempArea = tempUpazila.isNotEmpty && db.areas[tempUpazila] != null ? db.areas[tempUpazila]!.first : 'Local Area';
-                          });
-                        }
-                      },
-                    ),
-                    SizedBox(height: 12.h),
+                    if (distList.isNotEmpty) ...[
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('dist_${tempDiv}_$tempDist'),
+                        value: tempDist,
+                        decoration: const InputDecoration(labelText: "District"),
+                        items: distList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              tempDist = val;
+                              var newUpazilas = db.getUpazilasFor(val);
+                              tempUpazila = newUpazilas.isNotEmpty ? newUpazilas.first : '';
+                              var newAreas = db.getAreasFor(tempUpazila);
+                              tempArea = newAreas.isNotEmpty ? newAreas.first : 'Local Area';
+                            });
+                          }
+                        },
+                      ),
+                      SizedBox(height: 12.h),
+                    ],
 
                     // Upazila dropdown
-                    if (tempDist.isNotEmpty && db.upazilas[tempDist] != null) ...[
+                    if (upazilaList.isNotEmpty) ...[
                       DropdownButtonFormField<String>(
+                        key: ValueKey('upazila_${tempDist}_$tempUpazila'),
                         value: tempUpazila,
                         decoration: const InputDecoration(labelText: "Upazila"),
-                        items: db.upazilas[tempDist]!.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        items: upazilaList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                         onChanged: (val) {
                           if (val != null) {
                             setDialogState(() {
                               tempUpazila = val;
-                              tempArea = db.areas[val] != null ? db.areas[val]!.first : 'Local Area';
+                              var newAreas = db.getAreasFor(val);
+                              tempArea = newAreas.isNotEmpty ? newAreas.first : 'Local Area';
                             });
                           }
                         },
@@ -87,11 +173,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     ],
 
                     // Area dropdown
-                    if (tempUpazila.isNotEmpty && db.areas[tempUpazila] != null) ...[
+                    if (areaList.isNotEmpty) ...[
                       DropdownButtonFormField<String>(
+                        key: ValueKey('area_${tempUpazila}_$tempArea'),
                         value: tempArea,
                         decoration: const InputDecoration(labelText: "Area / Village"),
-                        items: db.areas[tempUpazila]!.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        items: areaList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                         onChanged: (val) {
                           if (val != null) {
                             setDialogState(() {
@@ -116,6 +203,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     db.currentUpazila.value = tempUpazila;
                     db.currentArea.value = tempArea;
                     Get.back();
+                    _fetchNearbyVendors();
                   },
                   child: const Text("Apply"),
                 ),
@@ -225,7 +313,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 16.w),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
                     ),
-                    child: const Icon(Icons.search),
+                    child: const Icon(Icons.search, color: Colors.white),
                   ),
                 ],
               ),
@@ -262,99 +350,119 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
               SizedBox(height: 12.h),
 
-              Obx(() {
-                var nearby = db.vendors.where((v) => v['area'] == db.currentArea.value).toList();
+              _isLoadingVendors
+                  ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+                  : (_apiVendors.isNotEmpty
+                      ? ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _apiVendors.length,
+                          itemBuilder: (context, idx) {
+                            var vendorItem = _apiVendors[idx];
+                            var vendorMap = vendorItem.toJson();
+                            return _buildVendorCard(vendorMap);
+                          },
+                        )
+                      : Obx(() {
+                          var nearby = db.vendors.where((v) => v['area'] == db.currentArea.value).toList();
 
-                if (nearby.isEmpty) {
-                  return Container(
-                    padding: EdgeInsets.all(24.r),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12.r),
-                    ),
-                    alignment: Alignment.center,
-                    child: Column(
-                      children: [
-                        const Icon(Icons.storefront, size: 48, color: Color(0xFF6E6E86)),
-                        SizedBox(height: 8.h),
-                        const Text("No vendors registered in your area yet.", style: TextStyle(color: Color(0xFF6E6E86))),
-                      ],
-                    ),
-                  );
-                }
+                          if (nearby.isEmpty) {
+                            return Container(
+                              padding: EdgeInsets.all(24.r),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12.r),
+                              ),
+                              alignment: Alignment.center,
+                              child: Column(
+                                children: [
+                                  const Icon(Icons.storefront, size: 48, color: Color(0xFF6E6E86)),
+                                  SizedBox(height: 8.h),
+                                  const Text("No vendors registered in your area yet.", style: TextStyle(color: Color(0xFF6E6E86))),
+                                ],
+                              ),
+                            );
+                          }
 
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: nearby.length,
-                  itemBuilder: (context, idx) {
-                    var vendor = nearby[idx];
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 12.h),
-                      padding: EdgeInsets.all(16.r),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(color: Colors.black.withOpacity(0.04)),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: const Color(0xFF2563EB).withOpacity(0.1),
-                            child: const Icon(Icons.store, color: Color(0xFF2563EB)),
-                          ),
-                          SizedBox(width: 16.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  vendor['shopName'] ?? 'Store',
-                                  style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
-                                ),
-                                Text(
-                                  "${vendor['name']} • ${vendor['category']}",
-                                  style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6E6E86)),
-                                ),
-                                SizedBox(height: 4.h),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on_outlined, size: 12, color: Color(0xFF6E6E86)),
-                                    SizedBox(width: 2.w),
-                                    Text(
-                                      vendor['area'] ?? 'Local',
-                                      style: TextStyle(fontSize: 11.sp, color: const Color(0xFF6E6E86)),
-                                    ),
-                                    SizedBox(width: 12.w),
-                                    const Icon(Icons.directions_walk, size: 12, color: Color(0xFF16A34A)),
-                                    SizedBox(width: 2.w),
-                                    Text("1.2 km", style: TextStyle(fontSize: 11.sp, color: const Color(0xFF16A34A))),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {
-                              Get.to(() => VendorProductScreen(vendor: vendor));
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: nearby.length,
+                            itemBuilder: (context, idx) {
+                              var vendor = nearby[idx];
+                              return _buildVendorCard(vendor);
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2563EB),
-                              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
-                              elevation: 0,
-                            ),
-                            child: Text("Products", style: TextStyle(fontSize: 12.sp)),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              }),
+                          );
+                        })),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildVendorCard(Map<String, dynamic> vendor) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 12.h),
+      padding: EdgeInsets.all(16.r),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: Colors.black.withOpacity(0.04)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: const Color(0xFF2563EB).withOpacity(0.1),
+            child: const Icon(Icons.store, color: Color(0xFF2563EB)),
+          ),
+          SizedBox(width: 16.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  vendor['shopName'] ?? 'Store',
+                  style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                ),
+                Text(
+                  "${vendor['name']} • ${vendor['category']}",
+                  style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6E6E86)),
+                ),
+                SizedBox(height: 4.h),
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 12, color: Color(0xFF6E6E86)),
+                    SizedBox(width: 2.w),
+                    Text(
+                      vendor['area'] ?? 'Local',
+                      style: TextStyle(fontSize: 11.sp, color: const Color(0xFF6E6E86)),
+                    ),
+                    SizedBox(width: 12.w),
+                    const Icon(Icons.directions_walk, size: 12, color: Color(0xFF16A34A)),
+                    SizedBox(width: 2.w),
+                    Text(
+                      "${vendor['distanceKm'] ?? 1.2} km",
+                      style: TextStyle(fontSize: 11.sp, color: const Color(0xFF16A34A)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Get.to(() => VendorProductScreen(vendor: vendor));
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
+              elevation: 0,
+            ),
+            child: Text("Products", style: TextStyle(fontSize: 12.sp, color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
